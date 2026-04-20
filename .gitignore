@@ -1,0 +1,10 @@
+# Звіти з даними — конфіденційно, не комітити
+reports/
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo

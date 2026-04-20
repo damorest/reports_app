@@ -259,269 +259,253 @@ def is_valid_nom(nom):
 
 
 # ============================================================
-# ЧИТАННЯ / КОПІЮВАННЯ
+# ОСНОВНА ФУНКЦІЯ ОБРОБКИ
 # ============================================================
-rb = xlrd.open_workbook(INPUT, formatting_info=True)
-wb = copy(rb)
+def process(input_bytes: bytes) -> tuple:
+    """
+    Обробляє вхідний .xls файл (як bytes) та повертає:
+      (output_bytes, unique_warnings, normal_count, internal_count)
+    """
+    import io
 
-# ============================================================
-# Дані для зведеного звіту: (org, kontragent) -> {service: sum}
-# Список попереджень: [{тип, організація, культура, послуга, опис}]
-# ============================================================
-summary  = defaultdict(lambda: defaultdict(float))
-warnings = []   # збираємо всі проблемні рядки
+    rb = xlrd.open_workbook(file_contents=input_bytes, formatting_info=True)
+    wb = copy(rb)
 
+    summary  = defaultdict(lambda: defaultdict(float))
+    warnings = []
 
-# ============================================================
-# 1. ЗБЕРІГАННЯ  (sheet 0)
-# cols: org=0, kontrag=6, kultura=10, delta=19, cina=20, suma=21
-# ============================================================
-rs = rb.sheet_by_name('зберігання')
-ws = wb.get_sheet(0)
+    # ----------------------------------------------------------
+    # 1. ЗБЕРІГАННЯ  (sheet 0)
+    # cols: org=0, kontrag=6, kultura=10, delta=19, cina=20, suma=21
+    # ----------------------------------------------------------
+    rs = rb.sheet_by_name('зберігання')
+    ws = wb.get_sheet(0)
 
-# Додаємо заголовки якщо відсутні
-if not rs.cell_value(6, 20):
-    ws.write(6, 20, 'ціна ПДВ')
-if not rs.cell_value(6, 21):
-    ws.write(6, 21, 'Сума ПДВ')
+    if not rs.cell_value(6, 20):
+        ws.write(6, 20, 'ціна ПДВ')
+    if not rs.cell_value(6, 21):
+        ws.write(6, 21, 'Сума ПДВ')
 
-for i in range(7, rs.nrows):
-    ct = rs.cell_type(i, 0)
-    org = rs.cell_value(i, 0)
-    if not is_data_row(ct, org):
-        continue
-    kontrag = rs.cell_value(i, 6)
-    nom     = rs.cell_value(i, 10)   # Культура
-    delta   = rs.cell_value(i, 19)
-    if not isinstance(delta, (int, float)) or delta == 0 or not is_valid_nom(nom):
-        ws.write(i, 20, '')
-        ws.write(i, 21, '')
-        continue
-    cina = get_vat(org, nom, 'зберігання', warnings)
-    suma = round(delta * cina, 6)
-    ws.write(i, 20, cina)
-    ws.write(i, 21, suma)
-    if cina > 0:
-        summary[(str(org).strip(), str(kontrag).strip())]['зберігання'] += suma
+    for i in range(7, rs.nrows):
+        ct  = rs.cell_type(i, 0)
+        org = rs.cell_value(i, 0)
+        if not is_data_row(ct, org):
+            continue
+        kontrag = rs.cell_value(i, 6)
+        nom     = rs.cell_value(i, 10)
+        delta   = rs.cell_value(i, 19)
+        if not isinstance(delta, (int, float)) or delta == 0 or not is_valid_nom(nom):
+            ws.write(i, 20, '')
+            ws.write(i, 21, '')
+            continue
+        cina = get_vat(org, nom, 'зберігання', warnings)
+        suma = round(delta * cina, 6)
+        ws.write(i, 20, cina)
+        ws.write(i, 21, suma)
+        if cina > 0:
+            summary[(str(org).strip(), str(kontrag).strip())]['зберігання'] += suma
 
-print('✓ зберігання оброблено')
+    # ----------------------------------------------------------
+    # 2. СУШКА  (sheet 1)
+    # cols: org=0, kontrag=1, nom=2, delta_och=5
+    #       cina_och=9, suma_och=10, cina_sus=11, suma_sus=12
+    # ----------------------------------------------------------
+    rs2 = rb.sheet_by_name('сушка')
+    ws2 = wb.get_sheet(1)
 
+    for i in range(20, rs2.nrows):
+        ct  = rs2.cell_type(i, 0)
+        org = rs2.cell_value(i, 0)
+        if not is_data_row(ct, org):
+            ws2.write(i, 9,  '')
+            ws2.write(i, 10, '')
+            ws2.write(i, 11, '')
+            ws2.write(i, 12, '')
+            continue
+        kontrag = rs2.cell_value(i, 1)
+        nom     = rs2.cell_value(i, 2)
+        d_och   = rs2.cell_value(i, 5)
+        d = float(d_och) / 1000.0 if isinstance(d_och, (int, float)) and d_och else 0.0
+        if not d or not is_valid_nom(nom):
+            ws2.write(i, 9,  '')
+            ws2.write(i, 10, '')
+            ws2.write(i, 11, '')
+            ws2.write(i, 12, '')
+            continue
+        c_och = get_vat(org, nom, 'очистка', warnings)
+        c_sus = get_vat(org, nom, 'сушка',   warnings)
+        s_och = round(d * c_och, 6)
+        s_sus = round(d * c_sus, 6)
+        ws2.write(i, 9,  c_och)
+        ws2.write(i, 10, s_och)
+        ws2.write(i, 11, c_sus)
+        ws2.write(i, 12, s_sus)
+        total_sushka = s_och + s_sus
+        if total_sushka > 0:
+            summary[(str(org).strip(), str(kontrag).strip())]['сушка'] += total_sushka
 
-# ============================================================
-# 2. СУШКА  (sheet 1)
-# cols: org=0, kontrag=1, nom=2
-#       delta_ochystka=5, delta_sushka=8
-#       cina_och=9, suma_och=10, cina_sus=11, suma_sus=12
-# ============================================================
-rs2 = rb.sheet_by_name('сушка')
-ws2 = wb.get_sheet(1)
+    # ----------------------------------------------------------
+    # 3. ПРИЙМАННЯ  (sheet 2)
+    # cols: org=0, kontrag=5, kultura=11, fizves=20, cina=28, suma=29
+    # ----------------------------------------------------------
+    rs3 = rb.sheet_by_name('приймання')
+    ws3 = wb.get_sheet(2)
 
-for i in range(20, rs2.nrows):
-    ct = rs2.cell_type(i, 0)
-    org = rs2.cell_value(i, 0)
-    if not is_data_row(ct, org):
-        ws2.write(i, 9,  '')
-        ws2.write(i, 10, '')
-        ws2.write(i, 11, '')
-        ws2.write(i, 12, '')
-        continue
-    kontrag = rs2.cell_value(i, 1)
-    nom     = rs2.cell_value(i, 2)
-    d_och   = rs2.cell_value(i, 5)   # Дельта очистка т% (div/1000 = тонно-%)
+    if not rs3.cell_value(2, 28):
+        ws3.write(2, 28, 'цінаПДВ')
 
-    # Обидві суми рахуються через дельта ОЧИСТКИ / 1000
-    d = float(d_och) / 1000.0 if isinstance(d_och, (int, float)) and d_och else 0.0
+    for i in range(3, rs3.nrows):
+        ct  = rs3.cell_type(i, 0)
+        org = rs3.cell_value(i, 0)
+        if not is_data_row(ct, org):
+            ws3.write(i, 28, '')
+            ws3.write(i, 29, '')
+            continue
+        kontrag = rs3.cell_value(i, 5)
+        nom     = rs3.cell_value(i, 11)
+        fizves  = rs3.cell_value(i, 20)
+        if not isinstance(fizves, (int, float)) or fizves == 0 or not is_valid_nom(nom):
+            ws3.write(i, 28, '')
+            ws3.write(i, 29, '')
+            continue
+        cina = get_vat(org, nom, 'приймання', warnings)
+        suma = round(float(fizves) * cina, 6)
+        ws3.write(i, 28, cina)
+        ws3.write(i, 29, suma)
+        if cina > 0:
+            summary[(str(org).strip(), str(kontrag).strip())]['приймання'] += suma
 
-    if not d or not is_valid_nom(nom):
-        ws2.write(i, 9,  '')
-        ws2.write(i, 10, '')
-        ws2.write(i, 11, '')
-        ws2.write(i, 12, '')
-        continue
+    # ----------------------------------------------------------
+    # 4. ЗВЕДЕНИЙ ЗВІТ
+    # ----------------------------------------------------------
+    ws4 = wb.add_sheet('Зведений звіт')
 
-    c_och = get_vat(org, nom, 'очистка', warnings)
-    c_sus = get_vat(org, nom, 'сушка',   warnings)
-    s_och = round(d * c_och, 6)
-    s_sus = round(d * c_sus, 6)
+    hdr      = xlwt.easyxf('font: bold true; borders: bottom thin')
+    num      = xlwt.easyxf(num_format_str='#,##0.00')
+    num_bold = xlwt.easyxf('font: bold true', num_format_str='#,##0.00')
+    red_num  = xlwt.easyxf('font: colour red', num_format_str='#,##0.00')
+    red_bold = xlwt.easyxf('font: bold true, colour red', num_format_str='#,##0.00')
 
-    ws2.write(i, 9,  c_och)
-    ws2.write(i, 10, s_och)
-    ws2.write(i, 11, c_sus)
-    ws2.write(i, 12, s_sus)
+    for c, w in enumerate([45, 45, 18, 18, 18, 18]):
+        ws4.col(c).width = w * 256
 
-    total_sushka = s_och + s_sus
-    if total_sushka > 0:
-        summary[(str(org).strip(), str(kontrag).strip())]['сушка'] += total_sushka
-
-print('✓ сушка оброблена')
-
-
-# ============================================================
-# 3. ПРИЙМАННЯ  (sheet 2)
-# cols: org=0, kontrag=5, kultura=11, fizves=20
-#       cina=28, suma=29
-# Формула: Сума ПДВ = ФизВес × ціна ПДВ
-# ============================================================
-rs3 = rb.sheet_by_name('приймання')
-ws3 = wb.get_sheet(2)
-
-# Заголовки
-if not rs3.cell_value(2, 28):
-    ws3.write(2, 28, 'цінаПДВ')
-if not rs3.cell_value(2, 29) or isinstance(rs3.cell_value(2, 29), float):
-    pass  # залишаємо загальний підсумок де він є
-
-for i in range(3, rs3.nrows):
-    ct = rs3.cell_type(i, 0)
-    org = rs3.cell_value(i, 0)
-    if not is_data_row(ct, org):
-        ws3.write(i, 28, '')
-        ws3.write(i, 29, '')
-        continue
-    kontrag = rs3.cell_value(i, 5)
-    nom     = rs3.cell_value(i, 11)  # Культура
-    fizves  = rs3.cell_value(i, 20)
-    if not isinstance(fizves, (int, float)) or fizves == 0 or not is_valid_nom(nom):
-        ws3.write(i, 28, '')
-        ws3.write(i, 29, '')
-        continue
-    cina = get_vat(org, nom, 'приймання', warnings)
-    suma = round(float(fizves) * cina, 6)
-    ws3.write(i, 28, cina)
-    ws3.write(i, 29, suma)
-    if cina > 0:
-        summary[(str(org).strip(), str(kontrag).strip())]['приймання'] += suma
-
-print('✓ приймання оброблено')
-
-
-# ============================================================
-# 4. ЗВЕДЕНИЙ ЗВІТ  (нова вкладка)
-# ============================================================
-ws4 = wb.add_sheet('Зведений звіт')
-
-# Стилі
-hdr = xlwt.easyxf('font: bold true; borders: bottom thin')
-num = xlwt.easyxf(num_format_str='#,##0.00')
-num_bold = xlwt.easyxf('font: bold true', num_format_str='#,##0.00')
-red_num  = xlwt.easyxf('font: colour red', num_format_str='#,##0.00')
-red_bold = xlwt.easyxf('font: bold true, colour red', num_format_str='#,##0.00')
-
-cols_w = [45, 45, 18, 18, 18, 18]
-for c, w in enumerate(cols_w):
-    ws4.col(c).width = w * 256
-
-headers = ['Організація', 'Контрагент', 'Зберігання', 'Сушка/Очистка', 'Приймання', 'Разом']
-for c, h in enumerate(headers):
-    ws4.write(0, c, h, hdr)
-
-normal_rows = []
-internal_rows = []
-
-for (org, kont), svc in sorted(summary.items()):
-    zbr = svc.get('зберігання', 0)
-    sus = svc.get('сушка', 0)
-    prm = svc.get('приймання', 0)
-    tot = zbr + sus + prm
-    e_org  = get_entity(org)
-    e_kont = get_entity(kont)
-    is_int = (e_org and e_kont and e_org == e_kont)
-    entry = (org, kont, zbr, sus, prm, tot, is_int)
-    if is_int:
-        internal_rows.append(entry)
-    else:
-        normal_rows.append(entry)
-
-row = 1
-# --- Основні рядки ---
-tot_zbr = tot_sus = tot_prm = tot_all = 0.0
-for org, kont, zbr, sus, prm, tot, _ in normal_rows:
-    ws4.write(row, 0, org)
-    ws4.write(row, 1, kont)
-    ws4.write(row, 2, zbr, num)
-    ws4.write(row, 3, sus, num)
-    ws4.write(row, 4, prm, num)
-    ws4.write(row, 5, tot, num)
-    tot_zbr += zbr; tot_sus += sus; tot_prm += prm; tot_all += tot
-    row += 1
-
-# Підсумок основних
-ws4.write(row, 0, 'РАЗОМ', num_bold)
-ws4.write(row, 2, tot_zbr, num_bold)
-ws4.write(row, 3, tot_sus, num_bold)
-ws4.write(row, 4, tot_prm, num_bold)
-ws4.write(row, 5, tot_all, num_bold)
-row += 2
-
-# --- Переміщення між філіями ---
-if internal_rows:
-    ws4.write(row, 0, 'ПЕРЕМІЩЕННЯ МІЖ ФІЛІЯМИ (не включаються до основного звіту)', hdr)
-    row += 1
+    headers = ['Організація', 'Контрагент', 'Зберігання', 'Сушка/Очистка', 'Приймання', 'Разом']
     for c, h in enumerate(headers):
-        ws4.write(row, c, h, hdr)
-    row += 1
-    int_zbr = int_sus = int_prm = int_all = 0.0
-    for org, kont, zbr, sus, prm, tot, _ in internal_rows:
-        ws4.write(row, 0, org, xlwt.easyxf('font: colour grey50'))
-        ws4.write(row, 1, kont, xlwt.easyxf('font: colour grey50'))
-        ws4.write(row, 2, zbr, red_num)
-        ws4.write(row, 3, sus, red_num)
-        ws4.write(row, 4, prm, red_num)
-        ws4.write(row, 5, tot, red_num)
-        int_zbr += zbr; int_sus += sus; int_prm += prm; int_all += tot
+        ws4.write(0, c, h, hdr)
+
+    normal_rows = []
+    internal_rows = []
+    for (org, kont), svc in sorted(summary.items()):
+        zbr = svc.get('зберігання', 0)
+        sus = svc.get('сушка', 0)
+        prm = svc.get('приймання', 0)
+        tot = zbr + sus + prm
+        e_org  = get_entity(org)
+        e_kont = get_entity(kont)
+        is_int = bool(e_org and e_kont and e_org == e_kont)
+        entry = (org, kont, zbr, sus, prm, tot, is_int)
+        (internal_rows if is_int else normal_rows).append(entry)
+
+    row = 1
+    tot_zbr = tot_sus = tot_prm = tot_all = 0.0
+    for org, kont, zbr, sus, prm, tot, _ in normal_rows:
+        ws4.write(row, 0, org)
+        ws4.write(row, 1, kont)
+        ws4.write(row, 2, zbr, num)
+        ws4.write(row, 3, sus, num)
+        ws4.write(row, 4, prm, num)
+        ws4.write(row, 5, tot, num)
+        tot_zbr += zbr; tot_sus += sus; tot_prm += prm; tot_all += tot
         row += 1
-    ws4.write(row, 0, 'РАЗОМ переміщення', red_bold)
-    ws4.write(row, 2, int_zbr, red_bold)
-    ws4.write(row, 3, int_sus, red_bold)
-    ws4.write(row, 4, int_prm, red_bold)
-    ws4.write(row, 5, int_all, red_bold)
+    ws4.write(row, 0, 'РАЗОМ', num_bold)
+    ws4.write(row, 2, tot_zbr, num_bold)
+    ws4.write(row, 3, tot_sus, num_bold)
+    ws4.write(row, 4, tot_prm, num_bold)
+    ws4.write(row, 5, tot_all, num_bold)
+    row += 2
+
+    if internal_rows:
+        ws4.write(row, 0, 'ПЕРЕМІЩЕННЯ МІЖ ФІЛІЯМИ (не включаються до основного звіту)', hdr)
+        row += 1
+        for c, h in enumerate(headers):
+            ws4.write(row, c, h, hdr)
+        row += 1
+        int_zbr = int_sus = int_prm = int_all = 0.0
+        for org, kont, zbr, sus, prm, tot, _ in internal_rows:
+            ws4.write(row, 0, org,  xlwt.easyxf('font: colour grey50'))
+            ws4.write(row, 1, kont, xlwt.easyxf('font: colour grey50'))
+            ws4.write(row, 2, zbr, red_num)
+            ws4.write(row, 3, sus, red_num)
+            ws4.write(row, 4, prm, red_num)
+            ws4.write(row, 5, tot, red_num)
+            int_zbr += zbr; int_sus += sus; int_prm += prm; int_all += tot
+            row += 1
+        ws4.write(row, 0, 'РАЗОМ переміщення', red_bold)
+        ws4.write(row, 2, int_zbr, red_bold)
+        ws4.write(row, 3, int_sus, red_bold)
+        ws4.write(row, 4, int_prm, red_bold)
+        ws4.write(row, 5, int_all, red_bold)
+
+    # ----------------------------------------------------------
+    # 5. ПОПЕРЕДЖЕННЯ
+    # ----------------------------------------------------------
+    seen_warns = set()
+    unique_warnings = []
+    for w in warnings:
+        key = (w['тип'], w['організація'], w['культура'], w['послуга'])
+        if key not in seen_warns:
+            seen_warns.add(key)
+            unique_warnings.append(w)
+
+    warn_orange = xlwt.easyxf('font: bold true; pattern: pattern solid, fore_colour orange')
+    warn_red    = xlwt.easyxf('pattern: pattern solid, fore_colour light_orange')
+    warn_hdr    = xlwt.easyxf('font: bold true; borders: bottom thin')
+    ok_green    = xlwt.easyxf('font: bold true; pattern: pattern solid, fore_colour light_green')
+
+    ws5 = wb.add_sheet('Попередження')
+    for c, w in enumerate([25, 45, 25, 15, 65]):
+        ws5.col(c).width = w * 256
+
+    if unique_warnings:
+        ws5.write(0, 0, f'⚠ Знайдено {len(unique_warnings)} позицій без ціни ПДВ — суми для них = 0', warn_orange)
+        ws5.write(2, 0, 'Тип проблеми',  warn_hdr)
+        ws5.write(2, 1, 'Організація',   warn_hdr)
+        ws5.write(2, 2, 'Культура',      warn_hdr)
+        ws5.write(2, 3, 'Послуга',       warn_hdr)
+        ws5.write(2, 4, 'Що зробити',    warn_hdr)
+        for r, w in enumerate(unique_warnings, start=3):
+            ws5.write(r, 0, w['тип'],         warn_red)
+            ws5.write(r, 1, w['організація'], warn_red)
+            ws5.write(r, 2, w['культура'],    warn_red)
+            ws5.write(r, 3, w['послуга'],     warn_red)
+            ws5.write(r, 4, w['опис'],        warn_red)
+    else:
+        ws5.write(0, 0, '✓ Всі організації та культури знайдені у прайс-листах.', ok_green)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue(), unique_warnings, len(normal_rows), len(internal_rows)
+
 
 # ============================================================
-# 5. ВКЛАДКА "ПОПЕРЕДЖЕННЯ"
+# CLI-запуск
 # ============================================================
-# Дедублікуємо: одне попередження на унікальну (тип, організація, культура, послуга)
-seen_warns = set()
-unique_warnings = []
-for w in warnings:
-    key = (w['тип'], w['організація'], w['культура'], w['послуга'])
-    if key not in seen_warns:
-        seen_warns.add(key)
-        unique_warnings.append(w)
+if __name__ == '__main__':
+    with open(INPUT, 'rb') as f:
+        data = f.read()
 
-warn_orange = xlwt.easyxf('font: bold true; pattern: pattern solid, fore_colour orange')
-warn_red    = xlwt.easyxf('pattern: pattern solid, fore_colour light_orange')
-warn_hdr    = xlwt.easyxf('font: bold true; borders: bottom thin')
-ok_green    = xlwt.easyxf('font: bold true; pattern: pattern solid, fore_colour light_green')
+    out_bytes, unique_warnings, n_normal, n_internal = process(data)
 
-ws5 = wb.add_sheet('Попередження')
-ws5.col(0).width = 25 * 256
-ws5.col(1).width = 45 * 256
-ws5.col(2).width = 25 * 256
-ws5.col(3).width = 15 * 256
-ws5.col(4).width = 65 * 256
+    with open(OUTPUT, 'wb') as f:
+        f.write(out_bytes)
 
-if unique_warnings:
-    ws5.write(0, 0, f'⚠ Знайдено {len(unique_warnings)} позицій без ціни ПДВ — суми для них = 0', warn_orange)
-    ws5.write(2, 0, 'Тип проблеми',   warn_hdr)
-    ws5.write(2, 1, 'Організація',     warn_hdr)
-    ws5.write(2, 2, 'Культура',        warn_hdr)
-    ws5.write(2, 3, 'Послуга',         warn_hdr)
-    ws5.write(2, 4, 'Що зробити',      warn_hdr)
-    for r, w in enumerate(unique_warnings, start=3):
-        ws5.write(r, 0, w['тип'],         warn_red)
-        ws5.write(r, 1, w['організація'], warn_red)
-        ws5.write(r, 2, w['культура'],    warn_red)
-        ws5.write(r, 3, w['послуга'],     warn_red)
-        ws5.write(r, 4, w['опис'],        warn_red)
-    # Друкуємо також у консоль
-    print(f'\n⚠  ПОПЕРЕДЖЕННЯ ({len(unique_warnings)} унікальних):')
-    for w in unique_warnings:
-        print(f'   [{w["тип"]}] {w["організація"]} | {w["культура"]} | {w["послуга"]}')
-    print('   → Відкрий вкладку "Попередження" у файлі результату.')
-else:
-    ws5.write(0, 0, '✓ Всі організації та культури знайдені у прайс-листах. Попереджень немає.', ok_green)
-    print('\n✓ Попереджень немає — всі ціни знайдено.')
+    if unique_warnings:
+        print(f'\n⚠  ПОПЕРЕДЖЕННЯ ({len(unique_warnings)} унікальних):')
+        for w in unique_warnings:
+            print(f'   [{w["тип"]}] {w["організація"]} | {w["культура"]} | {w["послуга"]}')
+        print('   → Відкрий вкладку "Попередження" у файлі результату.')
+    else:
+        print('\n✓ Попереджень немає — всі ціни знайдено.')
 
-wb.save(OUTPUT)
-print(f'\n✅ Збережено: {OUTPUT}')
-print(f'   Основних рядків: {len(normal_rows)}, переміщень: {len(internal_rows)}')
+    print(f'\n✅ Збережено: {OUTPUT}')
+    print(f'   Основних рядків: {n_normal}, переміщень: {n_internal}')
