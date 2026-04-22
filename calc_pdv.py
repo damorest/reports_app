@@ -281,9 +281,9 @@ def process(input_bytes: bytes) -> tuple:
     rs = rb.sheet_by_name('зберігання')
     ws = wb.get_sheet(0)
 
-    if not rs.cell_value(6, 20):
+    if rs.ncols <= 20 or not rs.cell_value(6, 20):
         ws.write(6, 20, 'ціна ПДВ')
-    if not rs.cell_value(6, 21):
+    if rs.ncols <= 21 or not rs.cell_value(6, 21):
         ws.write(6, 21, 'Сума ПДВ')
 
     for i in range(7, rs.nrows):
@@ -307,39 +307,42 @@ def process(input_bytes: bytes) -> tuple:
 
     # ----------------------------------------------------------
     # 2. СУШКА  (sheet 1)
-    # cols: org=0, kontrag=1, nom=2, delta_och=5
-    #       cina_och=9, suma_och=10, cina_sus=11, suma_sus=12
+    # cols: org=0, kontrag=4, nom=8
+    #       delta_och=17 (Дельта очистка т%), delta_sus=23 (Дельта сушка т%)
+    #       cina_och=24, suma_och=25, cina_sus=26, suma_sus=27
     # ----------------------------------------------------------
     rs2 = rb.sheet_by_name('сушка')
     ws2 = wb.get_sheet(1)
 
-    for i in range(20, rs2.nrows):
+    for i in range(1, rs2.nrows):
         ct  = rs2.cell_type(i, 0)
         org = rs2.cell_value(i, 0)
         if not is_data_row(ct, org):
-            ws2.write(i, 9,  '')
-            ws2.write(i, 10, '')
-            ws2.write(i, 11, '')
-            ws2.write(i, 12, '')
+            ws2.write(i, 24, '')
+            ws2.write(i, 25, '')
+            ws2.write(i, 26, '')
+            ws2.write(i, 27, '')
             continue
-        kontrag = rs2.cell_value(i, 1)
-        nom     = rs2.cell_value(i, 2)
-        d_och   = rs2.cell_value(i, 5)
-        d = float(d_och) / 1000.0 if isinstance(d_och, (int, float)) and d_och else 0.0
-        if not d or not is_valid_nom(nom):
-            ws2.write(i, 9,  '')
-            ws2.write(i, 10, '')
-            ws2.write(i, 11, '')
-            ws2.write(i, 12, '')
+        kontrag = rs2.cell_value(i, 4)
+        nom     = rs2.cell_value(i, 8)
+        d_och_v = rs2.cell_value(i, 17)
+        d_sus_v = rs2.cell_value(i, 23)
+        d_och = float(d_och_v) / 1000.0 if isinstance(d_och_v, (int, float)) and d_och_v else 0.0
+        d_sus = float(d_sus_v) / 1000.0 if isinstance(d_sus_v, (int, float)) and d_sus_v else 0.0
+        if not (d_och or d_sus) or not is_valid_nom(nom):
+            ws2.write(i, 24, '')
+            ws2.write(i, 25, '')
+            ws2.write(i, 26, '')
+            ws2.write(i, 27, '')
             continue
         c_och = get_vat(org, nom, 'очистка', warnings)
         c_sus = get_vat(org, nom, 'сушка',   warnings)
-        s_och = round(d * c_och, 6)
-        s_sus = round(d * c_sus, 6)
-        ws2.write(i, 9,  c_och)
-        ws2.write(i, 10, s_och)
-        ws2.write(i, 11, c_sus)
-        ws2.write(i, 12, s_sus)
+        s_och = round(d_och * c_och, 6)
+        s_sus = round(d_sus * c_sus, 6)
+        ws2.write(i, 24, c_och if d_och else '')
+        ws2.write(i, 25, s_och if d_och else '')
+        ws2.write(i, 26, c_sus if d_sus else '')
+        ws2.write(i, 27, s_sus if d_sus else '')
         total_sushka = s_och + s_sus
         if total_sushka > 0:
             summary[(str(org).strip(), str(kontrag).strip())]['сушка'] += total_sushka
@@ -363,7 +366,7 @@ def process(input_bytes: bytes) -> tuple:
             continue
         kontrag = rs3.cell_value(i, 5)
         nom     = rs3.cell_value(i, 11)
-        fizves  = rs3.cell_value(i, 20)
+        fizves  = rs3.cell_value(i, 18)
         if not isinstance(fizves, (int, float)) or fizves == 0 or not is_valid_nom(nom):
             ws3.write(i, 28, '')
             ws3.write(i, 29, '')
