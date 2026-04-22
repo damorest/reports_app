@@ -224,6 +224,10 @@ def get_vat(org, nom, service, warn_collector=None):
 import re as _re
 _DATE_RE = _re.compile(r'^\d{2}\.\d{2}\.\d{4}')  # 01.03.2026...
 
+def _cv(sheet, row, col, default=0):
+    """Безпечне читання клітинки — повертає default якщо рядок коротший."""
+    return sheet.cell_value(row, col) if len(sheet.row(row)) > col else default
+
 def is_data_row(cell_type, val):
     """Рядок є рядком даних (не дата, не заголовок, не підсумок)."""
     if cell_type != xlrd.XL_CELL_TEXT:
@@ -291,9 +295,9 @@ def process(input_bytes: bytes) -> tuple:
         org = rs.cell_value(i, 0)
         if not is_data_row(ct, org):
             continue
-        kontrag = rs.cell_value(i, 6)
-        nom     = rs.cell_value(i, 10)
-        delta   = rs.cell_value(i, 19)
+        kontrag = _cv(rs, i, 6, '')
+        nom     = _cv(rs, i, 10, '')
+        delta   = _cv(rs, i, 19)
         if not isinstance(delta, (int, float)) or delta == 0 or not is_valid_nom(nom):
             ws.write(i, 20, '')
             ws.write(i, 21, '')
@@ -323,10 +327,10 @@ def process(input_bytes: bytes) -> tuple:
             ws2.write(i, 26, '')
             ws2.write(i, 27, '')
             continue
-        kontrag = rs2.cell_value(i, 4)
-        nom     = rs2.cell_value(i, 8)
-        d_och_v = rs2.cell_value(i, 17)
-        d_sus_v = rs2.cell_value(i, 23)
+        kontrag = _cv(rs2, i, 4, '')
+        nom     = _cv(rs2, i, 8, '')
+        d_och_v = _cv(rs2, i, 17)
+        d_sus_v = _cv(rs2, i, 23)
         d_och = float(d_och_v) / 1000.0 if isinstance(d_och_v, (int, float)) and d_och_v else 0.0
         d_sus = float(d_sus_v) / 1000.0 if isinstance(d_sus_v, (int, float)) and d_sus_v else 0.0
         if not (d_och or d_sus) or not is_valid_nom(nom):
@@ -364,9 +368,9 @@ def process(input_bytes: bytes) -> tuple:
             ws3.write(i, 28, '')
             ws3.write(i, 29, '')
             continue
-        kontrag = rs3.cell_value(i, 5)
-        nom     = rs3.cell_value(i, 11)
-        fizves  = rs3.cell_value(i, 18)
+        kontrag = _cv(rs3, i, 5, '')
+        nom     = _cv(rs3, i, 11, '')
+        fizves  = _cv(rs3, i, 18)
         if not isinstance(fizves, (int, float)) or fizves == 0 or not is_valid_nom(nom):
             ws3.write(i, 28, '')
             ws3.write(i, 29, '')
