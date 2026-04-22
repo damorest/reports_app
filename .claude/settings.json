@@ -8,7 +8,9 @@
       "Bash(python3 -c \"import app\")",
       "Bash(python3 -c ' *)",
       "Bash(python3 calc_pdv.py \"new_example/сушка_чистка квітень 2026.xls\")",
-      "Bash(git commit -m 'Оновити формат вхідного файлу \\(квітень 2026\\) *)"
+      "Bash(git commit -m 'Оновити формат вхідного файлу \\(квітень 2026\\) *)",
+      "Bash(python3 -c \"from calc_pdv import process; print\\('import OK'\\)\")",
+      "Bash(git commit -m 'Фікс list index out of range для коротких рядків xlrd *)"
     ]
   }
 }
