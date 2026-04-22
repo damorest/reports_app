@@ -5,7 +5,10 @@
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
-      "Bash(python3 -c \"import app\")"
+      "Bash(python3 -c \"import app\")",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 calc_pdv.py \"new_example/сушка_чистка квітень 2026.xls\")",
+      "Bash(git commit -m 'Оновити формат вхідного файлу \\(квітень 2026\\) *)"
     ]
   }
 }
