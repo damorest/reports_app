@@ -1,6 +1,16 @@
 import streamlit as st
 import xlrd
+import subprocess
 from calc_pdv import process
+
+def _git_version():
+    try:
+        return subprocess.check_output(
+            ['git', 'rev-parse', '--short', 'HEAD'],
+            stderr=subprocess.DEVNULL
+        ).decode().strip()
+    except Exception:
+        return 'unknown'
 
 REQUIRED_SHEETS = ('зберігання', 'сушка', 'приймання')
 MAX_SIZE_MB = 50
@@ -96,3 +106,6 @@ if uploaded is not None:
             file_name=result_name,
             mime='application/vnd.ms-excel',
         )
+
+st.divider()
+st.caption(f'МХП Елеватори · Розрахунок ПДВ · commit {_git_version()}')
