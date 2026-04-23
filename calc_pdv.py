@@ -280,7 +280,7 @@ def process(input_bytes: bytes) -> tuple:
 
     # ----------------------------------------------------------
     # 1. ЗБЕРІГАННЯ  (sheet 0)
-    # cols: org=0, kontrag=6, kultura=10, delta=19, cina=20, suma=21
+    # cols: org=0, kontrag=6, kultura=10, k_zberigannya=17, cina=20, suma=21
     # ----------------------------------------------------------
     rs = rb.sheet_by_name('зберігання')
     ws = wb.get_sheet(0)
@@ -297,7 +297,7 @@ def process(input_bytes: bytes) -> tuple:
             continue
         kontrag = _cv(rs, i, 6, '')
         nom     = _cv(rs, i, 10, '')
-        delta   = _cv(rs, i, 19)
+        delta   = _cv(rs, i, 17)
         if not isinstance(delta, (int, float)) or delta == 0 or not is_valid_nom(nom):
             ws.write(i, 20, '')
             ws.write(i, 21, '')
@@ -312,7 +312,7 @@ def process(input_bytes: bytes) -> tuple:
     # ----------------------------------------------------------
     # 2. СУШКА  (sheet 1)
     # cols: org=0, kontrag=4, nom=8
-    #       delta_och=17 (Дельта очистка т%), delta_sus=23 (Дельта сушка т%)
+    #       k_och=10 (Количество_очистка_т%), k_sus=19 (Количество_сушка_т%)
     #       cina_och=24, suma_och=25, cina_sus=26, suma_sus=27
     # ----------------------------------------------------------
     rs2 = rb.sheet_by_name('сушка')
@@ -329,8 +329,8 @@ def process(input_bytes: bytes) -> tuple:
             continue
         kontrag = _cv(rs2, i, 4, '')
         nom     = _cv(rs2, i, 8, '')
-        d_och_v = _cv(rs2, i, 17)
-        d_sus_v = _cv(rs2, i, 23)
+        d_och_v = _cv(rs2, i, 10)
+        d_sus_v = _cv(rs2, i, 19)
         d_och = float(d_och_v) / 1000.0 if isinstance(d_och_v, (int, float)) and d_och_v else 0.0
         d_sus = float(d_sus_v) / 1000.0 if isinstance(d_sus_v, (int, float)) and d_sus_v else 0.0
         if not (d_och or d_sus) or not is_valid_nom(nom):
