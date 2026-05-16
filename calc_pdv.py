@@ -228,6 +228,15 @@ def _cv(sheet, row, col, default=0):
     """Безпечне читання клітинки — повертає default якщо рядок коротший."""
     return sheet.cell_value(row, col) if len(sheet.row(row)) > col else default
 
+def _inn(val):
+    """Нормалізує ІНН: число 361879902121.0 → рядок '361879902121'. Порожнє → ''."""
+    if not val:
+        return ''
+    s = str(val).strip()
+    if s.endswith('.0'):
+        s = s[:-2]
+    return s if s and s != '0' else ''
+
 def is_data_row(cell_type, val):
     """Рядок є рядком даних (не дата, не заголовок, не підсумок)."""
     if cell_type != xlrd.XL_CELL_TEXT:
@@ -275,45 +284,51 @@ def process(input_bytes: bytes) -> tuple:
     rb = xlrd.open_workbook(file_contents=input_bytes, formatting_info=True)
     wb = copy(rb)
 
-    summary  = defaultdict(lambda: defaultdict(float))
-    warnings = []
+    summary          = defaultdict(lambda: defaultdict(float))
+    pair_is_internal = {}   # (org, kontrag) -> bool на основі ІНН
+    warnings         = []
 
     # ----------------------------------------------------------
     # 1. ЗБЕРІГАННЯ  (sheet 0)
-    # cols: org=0, kontrag=6, kultura=10, k_zberigannya=17, cina=20, suma=21
+    # cols: org=0, inn_org=6, kontrag=9, kultura=13, inn_kontrag=16,
+    #       k_zberigannya=21, cina=24, suma=25
     # ----------------------------------------------------------
     rs = rb.sheet_by_name('зберігання')
     ws = wb.get_sheet(0)
 
-    if rs.ncols <= 20 or not rs.cell_value(6, 20):
-        ws.write(6, 20, 'ціна ПДВ')
-    if rs.ncols <= 21 or not rs.cell_value(6, 21):
-        ws.write(6, 21, 'Сума ПДВ')
+    if rs.ncols <= 24 or not rs.cell_value(6, 24):
+        ws.write(6, 24, 'ціна ПДВ')
+    if rs.ncols <= 25 or not rs.cell_value(6, 25):
+        ws.write(6, 25, 'Сума ПДВ')
 
     for i in range(7, rs.nrows):
         ct  = rs.cell_type(i, 0)
         org = rs.cell_value(i, 0)
         if not is_data_row(ct, org):
             continue
-        kontrag = _cv(rs, i, 6, '')
-        nom     = _cv(rs, i, 10, '')
-        delta   = _cv(rs, i, 17)
+        inn_o   = _inn(_cv(rs, i, 6,  ''))
+        kontrag = _cv(rs, i, 9,  '')
+        nom     = _cv(rs, i, 13, '')
+        inn_k   = _inn(_cv(rs, i, 16, ''))
+        delta   = _cv(rs, i, 21)
         if not isinstance(delta, (int, float)) or delta == 0 or not is_valid_nom(nom):
-            ws.write(i, 20, '')
-            ws.write(i, 21, '')
+            ws.write(i, 24, '')
+            ws.write(i, 25, '')
             continue
         cina = get_vat(org, nom, 'зберігання', warnings)
         suma = round(delta * cina, 6)
-        ws.write(i, 20, cina)
-        ws.write(i, 21, suma)
+        ws.write(i, 24, cina)
+        ws.write(i, 25, suma)
         if cina > 0:
-            summary[(str(org).strip(), str(kontrag).strip())]['зберігання'] += suma
+            key = (str(org).strip(), str(kontrag).strip())
+            summary[key]['зберігання'] += suma
+            pair_is_internal.setdefault(key, bool(inn_o and inn_k and inn_o == inn_k))
 
     # ----------------------------------------------------------
     # 2. СУШКА  (sheet 1)
-    # cols: org=0, kontrag=4, nom=8
-    #       k_och=10 (Количество_очистка_т%), k_sus=19 (Количество_сушка_т%)
-    #       cina_och=24, suma_och=25, cina_sus=26, suma_sus=27
+    # cols: org=0, inn_org=4, kontrag=7, nom=11, inn_kontrag=14
+    #       k_och=17 (Количество_очистка_т%), k_sus=25 (Количество_сушка_т%)
+    #       cina_och=29, suma_och=30, cina_sus=31, suma_sus=32
     # ----------------------------------------------------------
     rs2 = rb.sheet_by_name('сушка')
     ws2 = wb.get_sheet(1)
@@ -322,65 +337,76 @@ def process(input_bytes: bytes) -> tuple:
         ct  = rs2.cell_type(i, 0)
         org = rs2.cell_value(i, 0)
         if not is_data_row(ct, org):
-            ws2.write(i, 24, '')
-            ws2.write(i, 25, '')
-            ws2.write(i, 26, '')
-            ws2.write(i, 27, '')
+            ws2.write(i, 29, '')
+            ws2.write(i, 30, '')
+            ws2.write(i, 31, '')
+            ws2.write(i, 32, '')
             continue
-        kontrag = _cv(rs2, i, 4, '')
-        nom     = _cv(rs2, i, 8, '')
-        d_och_v = _cv(rs2, i, 10)
-        d_sus_v = _cv(rs2, i, 19)
+        inn_o   = _inn(_cv(rs2, i, 4,  ''))
+        kontrag = _cv(rs2, i, 7,  '')
+        nom     = _cv(rs2, i, 11, '')
+        inn_k   = _inn(_cv(rs2, i, 14, ''))
+        d_och_v = _cv(rs2, i, 17)
+        d_sus_v = _cv(rs2, i, 25)
         d_och = float(d_och_v) / 1000.0 if isinstance(d_och_v, (int, float)) and d_och_v else 0.0
         d_sus = float(d_sus_v) / 1000.0 if isinstance(d_sus_v, (int, float)) and d_sus_v else 0.0
         if not (d_och or d_sus) or not is_valid_nom(nom):
-            ws2.write(i, 24, '')
-            ws2.write(i, 25, '')
-            ws2.write(i, 26, '')
-            ws2.write(i, 27, '')
+            ws2.write(i, 29, '')
+            ws2.write(i, 30, '')
+            ws2.write(i, 31, '')
+            ws2.write(i, 32, '')
             continue
         c_och = get_vat(org, nom, 'очистка', warnings)
         c_sus = get_vat(org, nom, 'сушка',   warnings)
         s_och = round(d_och * c_och, 6)
         s_sus = round(d_sus * c_sus, 6)
-        ws2.write(i, 24, c_och if d_och else '')
-        ws2.write(i, 25, s_och if d_och else '')
-        ws2.write(i, 26, c_sus if d_sus else '')
-        ws2.write(i, 27, s_sus if d_sus else '')
+        ws2.write(i, 29, c_och if d_och else '')
+        ws2.write(i, 30, s_och if d_och else '')
+        ws2.write(i, 31, c_sus if d_sus else '')
+        ws2.write(i, 32, s_sus if d_sus else '')
         total_sushka = s_och + s_sus
         if total_sushka > 0:
-            summary[(str(org).strip(), str(kontrag).strip())]['сушка'] += total_sushka
+            key = (str(org).strip(), str(kontrag).strip())
+            summary[key]['сушка'] += total_sushka
+            pair_is_internal.setdefault(key, bool(inn_o and inn_k and inn_o == inn_k))
 
     # ----------------------------------------------------------
     # 3. ПРИЙМАННЯ  (sheet 2)
-    # cols: org=0, kontrag=5, kultura=11, fizves=20, cina=28, suma=29
+    # cols: org=0, inn_org=5, kontrag=7, kultura=14, inn_kontrag=18,
+    #       fizves=26, cina=32, suma=33
     # ----------------------------------------------------------
     rs3 = rb.sheet_by_name('приймання')
     ws3 = wb.get_sheet(2)
 
-    if not rs3.cell_value(2, 28):
-        ws3.write(2, 28, 'цінаПДВ')
+    if rs3.ncols <= 32 or not rs3.cell_value(2, 32):
+        ws3.write(2, 32, 'цінаПДВ')
+    if rs3.ncols <= 33 or not rs3.cell_value(2, 33):
+        ws3.write(2, 33, 'Сума ПДВ')
 
     for i in range(3, rs3.nrows):
         ct  = rs3.cell_type(i, 0)
         org = rs3.cell_value(i, 0)
         if not is_data_row(ct, org):
-            ws3.write(i, 28, '')
-            ws3.write(i, 29, '')
+            ws3.write(i, 32, '')
+            ws3.write(i, 33, '')
             continue
-        kontrag = _cv(rs3, i, 5, '')
-        nom     = _cv(rs3, i, 11, '')
-        fizves  = _cv(rs3, i, 18)
+        inn_o   = _inn(_cv(rs3, i, 5,  ''))
+        kontrag = _cv(rs3, i, 7,  '')
+        nom     = _cv(rs3, i, 14, '')
+        inn_k   = _inn(_cv(rs3, i, 18, ''))
+        fizves  = _cv(rs3, i, 26)
         if not isinstance(fizves, (int, float)) or fizves == 0 or not is_valid_nom(nom):
-            ws3.write(i, 28, '')
-            ws3.write(i, 29, '')
+            ws3.write(i, 32, '')
+            ws3.write(i, 33, '')
             continue
         cina = get_vat(org, nom, 'приймання', warnings)
         suma = round(float(fizves) * cina, 6)
-        ws3.write(i, 28, cina)
-        ws3.write(i, 29, suma)
+        ws3.write(i, 32, cina)
+        ws3.write(i, 33, suma)
         if cina > 0:
-            summary[(str(org).strip(), str(kontrag).strip())]['приймання'] += suma
+            key = (str(org).strip(), str(kontrag).strip())
+            summary[key]['приймання'] += suma
+            pair_is_internal.setdefault(key, bool(inn_o and inn_k and inn_o == inn_k))
 
     # ----------------------------------------------------------
     # 4. ЗВЕДЕНИЙ ЗВІТ
@@ -407,9 +433,7 @@ def process(input_bytes: bytes) -> tuple:
         sus = svc.get('сушка', 0)
         prm = svc.get('приймання', 0)
         tot = zbr + sus + prm
-        e_org  = get_entity(org)
-        e_kont = get_entity(kont)
-        is_int = bool(e_org and e_kont and e_org == e_kont)
+        is_int = pair_is_internal.get((org, kont), False)
         entry = (org, kont, zbr, sus, prm, tot, is_int)
         (internal_rows if is_int else normal_rows).append(entry)
 
