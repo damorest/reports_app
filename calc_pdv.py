@@ -226,9 +226,6 @@ for _alias, _src in (('птахофабрика', 'вквк'), ('агрокря�
                      ('урожайна', 'андріяшів'), ('агро-с', 'яготинськ')):
     EARLY_GRAIN_PRICES[_alias] = EARLY_GRAIN_PRICES[_src]
 
-# Організація, за прайсом якої рахуються сторонні елеватори (їх немає у прайсах МХП)
-DEFAULT_EARLY_KEY = 'вквк'
-
 # Культури без власного прайсу — рахуються за цінами культури-аналога.
 # Гірчиця (рання олійна) — за ріпаком; у прайсах МХП її немає взагалі.
 CROP_ANALOG = {'гірчиця': 'ріпак'}
@@ -237,6 +234,14 @@ CROP_ANALOG = {'гірчиця': 'ріпак'}
 # організації. «Урожай НВФ ТОВ» — за Ямпільським елеватором, бо це філія
 # ТОВ "Зернопродукт МХП" (рішення від 24.09.2026).
 ORG_ANALOG = {'урожай нвф': 'ямпільськ'}
+
+# ============================================================
+# ЗАПАСНІ ЗНАЧЕННЯ для позицій, яких немає у прайсах
+# Щоб нова культура чи новий елеватор не давали мовчазний 0, вони рахуються
+# за цими значеннями — завжди з попередженням у вкладці «Попередження».
+# ============================================================
+DEFAULT_CROP_KEY = 'ріпак'      # нерозпізнана культура → ціни ріпаку
+DEFAULT_ORG_KEY  = 'ямпільськ'  # організація поза прайсами → прайс Ямпільського
 
 
 def get_crop_key(nom):
@@ -278,81 +283,58 @@ def _resolve_org_key(org, nom, service, warn_collector):
 
 
 def get_vat(org, nom, service, warn_collector=None):
-    """Повертає суму ПДВ. Якщо ціна не знайдена — додає попередження у warn_collector."""
+    """Повертає суму ПДВ по одній позиції.
+
+    Позиції, яких немає у прайсах, не обнуляються мовчки: нерозпізнана
+    культура рахується за DEFAULT_CROP_KEY, невідома організація — за
+    DEFAULT_ORG_KEY, і кожен такий випадок потрапляє у warn_collector.
+    """
+    def warn(tип, опис):
+        if warn_collector is not None:
+            warn_collector.append({
+                'тип': tип,
+                'організація': str(org).strip(),
+                'культура': str(nom).strip(),
+                'послуга': service,
+                'опис': опис,
+            })
+
+    org_s, nom_s = str(org).strip(), str(nom).strip()
+
+    # --- культура --------------------------------------------------------
     ck = get_crop_key(nom)
     if not ck:
-        if warn_collector is not None and nom and str(nom).strip():
-            warn_collector.append({
-                'тип': 'Невідома культура',
-                'організація': str(org).strip(),
-                'культура': str(nom).strip(),
-                'послуга': service,
-                'опис': f'Культуру "{str(nom).strip()}" не знайдено у прайс-листах. Сума ПДВ = 0.',
-            })
-        return 0.0
-    # Культура без власного прайсу (гірчиця) — рахується за культурою-аналогом
-    price_ck = CROP_ANALOG.get(ck, ck)
-    if price_ck != ck and warn_collector is not None:
-        warn_collector.append({
-            'тип': 'Ціна за аналогією',
-            'організація': str(org).strip(),
-            'культура': str(nom).strip(),
-            'послуга': service,
-            'опис': f'Для культури "{str(nom).strip()}" немає власного прайсу. '
-                    f'Застосовано ціни культури "{price_ck}". Перевірте суму.',
-        })
-
-    # Ранні зернові та олійні — з 2026 МР у кожного елеватора свій прайс
-    if price_ck in ('пшениця', 'ріпак'):
-        ok = _resolve_org_key(org, nom, service, warn_collector)
-        if not ok:
-            # Сторонні елеватори, яких немає у прайсах МХП: рахуємо за базовим
-            # прайсом, але сигналізуємо, щоб рішення було свідомим.
-            if warn_collector is not None:
-                warn_collector.append({
-                    'тип': 'Організація поза прайсом',
-                    'організація': str(org).strip(),
-                    'культура': str(nom).strip(),
-                    'послуга': service,
-                    'опис': f'Організації "{str(org).strip()}" немає у прайс-листах МХП. '
-                            f'Застосовано прайс "{DEFAULT_EARLY_KEY}". Перевірте суму.',
-                })
-            ok = DEFAULT_EARLY_KEY
-        price = EARLY_GRAIN_PRICES.get(ok, {}).get(price_ck, {}).get(service, None)
-        if price is None:
-            if warn_collector is not None:
-                warn_collector.append({
-                    'тип': 'Відсутня ціна',
-                    'організація': str(org).strip(),
-                    'культура': str(nom).strip(),
-                    'послуга': service,
-                    'опис': f'Немає ціни для {str(nom).strip()} / {service} у прайсі ранніх '
-                            f'організації "{str(org).strip()}". Сума ПДВ = 0.',
-                })
+        if not nom_s:
             return 0.0
-        return price
+        ck = DEFAULT_CROP_KEY
+        warn('Невідома культура',
+             f'Культури "{nom_s}" немає у прайс-листах. '
+             f'Застосовано ціни культури "{ck}". Перевірте суму.')
+    else:
+        # культура з домовленим аналогом (гірчиця → ріпак)
+        src = CROP_ANALOG.get(ck)
+        if src:
+            warn('Ціна за аналогією',
+                 f'Для культури "{nom_s}" немає власного прайсу. '
+                 f'Застосовано ціни культури "{src}". Перевірте суму.')
+            ck = src
 
+    # --- організація -----------------------------------------------------
     ok = _resolve_org_key(org, nom, service, warn_collector)
     if not ok:
-        if warn_collector is not None:
-            warn_collector.append({
-                'тип': 'Невідома організація',
-                'організація': str(org).strip(),
-                'культура': str(nom).strip(),
-                'послуга': service,
-                'опис': f'Організацію "{str(org).strip()}" не знайдено у прайс-листах. Сума ПДВ = 0.',
-            })
-        return 0.0
-    price = PRICES.get(ok, {}).get(ck, {}).get(service, None)
+        ok = DEFAULT_ORG_KEY
+        warn('Невідома організація',
+             f'Організації "{org_s}" немає у прайс-листах МХП. '
+             f'Застосовано прайс "{ok}". Перевірте суму.')
+
+    # --- ціна ------------------------------------------------------------
+    # ранні зернові та олійні й пізні зернові лежать в окремих прайсах
+    table = EARLY_GRAIN_PRICES if ck in ('пшениця', 'ріпак') else PRICES
+    price = table.get(ok, {}).get(ck, {}).get(service, None)
     if price is None:
-        if warn_collector is not None:
-            warn_collector.append({
-                'тип': 'Відсутня ціна',
-                'організація': str(org).strip(),
-                'культура': str(nom).strip(),
-                'послуга': service,
-                'опис': f'Немає ціни для {str(nom).strip()} / {service} у прайсі організації "{str(org).strip()}". Сума ПДВ = 0.',
-            })
+        warn('Відсутня ціна',
+             f'Немає ціни для {nom_s} / {service} у прайсі організації "{org_s}". '
+             f'Сума ПДВ = 0.')
         return 0.0
     return price
 
@@ -712,7 +694,7 @@ def process(input_bytes: bytes) -> tuple:
 
     if unique_warnings:
         ws5.write(0, 0, f'⚠ Знайдено {len(unique_warnings)} позицій, що потребують уваги '
-                        f'(немає ціни → сума 0, або застосовано загальний прайс)', warn_orange)
+                        f'(немає у прайсі → взято запасну ціну, або сума = 0)', warn_orange)
         ws5.write(2, 0, 'Тип проблеми',  warn_hdr)
         ws5.write(2, 1, 'Організація',   warn_hdr)
         ws5.write(2, 2, 'Культура',      warn_hdr)
