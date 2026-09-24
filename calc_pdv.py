@@ -123,7 +123,7 @@ ORG_KEYS_ORDERED = [
     'катеринопільськ', 'мзвкк', 'андріяшів', 'ямпільськ', 'вендичанськ',
     'елеваторний', 'воскресинц', 'львівськ', 'краснянськ', 'новомосковськ',
     'яготинськ', 'перспектив', 'агрокряж', 'урожайна', 'агро-с',
-    'птахофабрика', 'вквк',
+    'птахофабрика', 'вквк', 'урожай нвф',
 ]
 
 # Для визначення "переміщень між філіями" — групування в одну юридичну сутність
@@ -233,6 +233,11 @@ DEFAULT_EARLY_KEY = 'вквк'
 # Гірчиця (рання олійна) — за ріпаком; у прайсах МХП її немає взагалі.
 CROP_ANALOG = {'гірчиця': 'ріпак'}
 
+# Сторонні елеватори з домовленим тарифом — рахуються за прайсом іншої
+# організації. «Урожай НВФ ТОВ» — за Ямпільським елеватором, бо це філія
+# ТОВ "Зернопродукт МХП" (рішення від 24.09.2026).
+ORG_ANALOG = {'урожай нвф': 'ямпільськ'}
+
 
 def get_crop_key(nom):
     if not nom:
@@ -251,6 +256,25 @@ def get_crop_key(nom):
     if 'гірчиц' in low:
         return 'гірчиця'
     return None
+
+
+def _resolve_org_key(org, nom, service, warn_collector):
+    """Ключ організації у прайсах. Для сторонніх елеваторів із домовленим
+    тарифом (ORG_ANALOG) повертає ключ організації-аналога і сигналізує про це."""
+    ok = get_org_key(org)
+    src = ORG_ANALOG.get(ok)
+    if src:
+        if warn_collector is not None:
+            warn_collector.append({
+                'тип': 'Ціна за аналогією',
+                'організація': str(org).strip(),
+                'культура': str(nom).strip(),
+                'послуга': service,
+                'опис': f'Організації "{str(org).strip()}" немає у прайс-листах МХП. '
+                        f'За домовленістю застосовано прайс "{src}". Перевірте суму.',
+            })
+        return src
+    return ok
 
 
 def get_vat(org, nom, service, warn_collector=None):
@@ -280,7 +304,7 @@ def get_vat(org, nom, service, warn_collector=None):
 
     # Ранні зернові та олійні — з 2026 МР у кожного елеватора свій прайс
     if price_ck in ('пшениця', 'ріпак'):
-        ok = get_org_key(org)
+        ok = _resolve_org_key(org, nom, service, warn_collector)
         if not ok:
             # Сторонні елеватори, яких немає у прайсах МХП: рахуємо за базовим
             # прайсом, але сигналізуємо, щоб рішення було свідомим.
@@ -308,7 +332,7 @@ def get_vat(org, nom, service, warn_collector=None):
             return 0.0
         return price
 
-    ok = get_org_key(org)
+    ok = _resolve_org_key(org, nom, service, warn_collector)
     if not ok:
         if warn_collector is not None:
             warn_collector.append({
