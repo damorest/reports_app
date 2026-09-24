@@ -123,7 +123,7 @@ ORG_KEYS_ORDERED = [
     'катеринопільськ', 'мзвкк', 'андріяшів', 'ямпільськ', 'вендичанськ',
     'елеваторний', 'воскресинц', 'львівськ', 'краснянськ', 'новомосковськ',
     'яготинськ', 'перспектив', 'агрокряж', 'урожайна', 'агро-с',
-    'птахофабрика', 'вквк',
+    'птахофабрика', 'вквк', 'урожай нвф',
 ]
 
 # Для визначення "переміщень між філіями" — групування в одну юридичну сутність
@@ -155,12 +155,93 @@ def get_entity(name):
     return ENTITY.get(k) if k else None
 
 
-# Ціни ранніх зернових (TE-03, ВКВК) — єдиний доступний прайс на ранні зернові.
-# Застосовується для всіх організацій, де зустрічається пшениця/ячмінь/ріпак.
+# ============================================================
+# Ціни ПДВ на РАННІ зернові та олійні (пшениця/ячмінь/жито/овес, ріпак)
+# Прайс-листи ТЕ-01…ТЕ-15 від 01.08.2026 (prices/price_ранні_2026-2027.pdf).
+# До 2026 МР був один спільний прайс ТЕ-03 на всі організації — тепер
+# у кожного елеватора свій, тому структура така сама, як у PRICES.
+# Значення = ціна з ПДВ − ціна без ПДВ.
+# ============================================================
 EARLY_GRAIN_PRICES = {
-    'пшениця': {'приймання': 5.30, 'очистка': 5.52, 'сушка': 20.78, 'зберігання': 0.64},
-    'ріпак':   {'приймання': 5.84, 'очистка': 6.20, 'сушка': 22.16, 'зберігання': 0.70},
+    'вквк': {  # ТЕ-03  ВКВК ф-я ТОВ "Вінницька птахофабрика"
+        'пшениця': {'приймання':  4.17, 'очистка':  5.93, 'сушка': 20.47, 'зберігання':  0.66},
+        'ріпак':  {'приймання':  4.17, 'очистка':  6.43, 'сушка': 22.84, 'зберігання':  0.69},
+    },
+    'катеринопільськ': {  # ТЕ-02  ТОВ "Катеринопільський елеватор"
+        'пшениця': {'приймання':  5.30, 'очистка':  5.86, 'сушка': 21.84, 'зберігання':  0.64},
+        'ріпак':  {'приймання':  5.84, 'очистка':  6.05, 'сушка': 23.51, 'зберігання':  0.68},
+    },
+    'мзвкк': {  # ТЕ-01  ПрАТ "МЗВКК"
+        'пшениця': {'приймання':  5.31, 'очистка':  5.86, 'сушка': 21.84, 'зберігання':  0.64},
+        'ріпак':  {'приймання':  5.59, 'очистка':  6.05, 'сушка': 23.51, 'зберігання':  0.72},
+    },
+    'андріяшів': {  # ТЕ-04  ф-я "МХП-Андріяшівський елеватор"
+        'пшениця': {'приймання':  4.78, 'очистка':  5.60, 'сушка': 21.79, 'зберігання':  0.69},
+        'ріпак':  {'приймання':  6.70, 'очистка':  7.25, 'сушка': 29.45, 'зберігання':  0.85},
+    },
+    'ямпільськ': {  # ТЕ-05  Ямпільський елеватор
+        'пшениця': {'приймання':  6.43, 'очистка':  7.04, 'сушка': 22.00, 'зберігання':  0.77},
+        'ріпак':  {'приймання':  6.43, 'очистка':  7.04, 'сушка': 22.00, 'зберігання':  0.77},
+    },
+    'вендичанськ': {  # ТЕ-06  Вендичанський елеватор
+        'пшениця': {'приймання':  5.42, 'очистка':  5.75, 'сушка': 20.47, 'зберігання':  0.66},
+        'ріпак':  {'приймання':  5.83, 'очистка':  5.92, 'сушка': 22.84, 'зберігання':  0.69},
+    },
+    'елеваторний': {  # ТЕ-07/08/13  Елеваторний комплекс — у звіті три майданчики
+        # у звіті з 1С вони приходять одним рядком і не розрізняються,
+        # тому взято МАКСИМУМ ціни по кожній позиції (рішення від 24.09.2026)
+        'пшениця': {'приймання':  4.63, 'очистка':  6.12, 'сушка': 20.47, 'зберігання':  0.66},
+        'ріпак':  {'приймання':  4.63, 'очистка':  6.39, 'сушка': 22.84, 'зберігання':  0.69},
+    },
+    'воскресинц': {  # ТЕ-09  Воскресинцівський елеватор
+        'пшениця': {'приймання':  6.43, 'очистка':  7.04, 'сушка': 21.50, 'зберігання':  0.77},
+        'ріпак':  {'приймання':  6.43, 'очистка':  7.04, 'сушка': 21.50, 'зберігання':  0.77},
+    },
+    'львівськ': {  # ТЕ-10  Львівський елеватор
+        'пшениця': {'приймання':  6.66, 'очистка':  8.12, 'сушка': 26.00, 'зберігання':  0.77},
+        'ріпак':  {'приймання':  6.84, 'очистка':  7.84, 'сушка': 30.00, 'зберігання':  0.77},
+    },
+    'краснянськ': {  # ТЕ-11  Краснянський елеватор
+        'пшениця': {'приймання':  6.66, 'очистка':  7.04, 'сушка': 23.97, 'зберігання':  0.77},
+        'ріпак':  {'приймання':  6.84, 'очистка':  7.04, 'сушка': 24.63, 'зберігання':  0.77},
+    },
+    'новомосковськ': {  # ТЕ-12/12.1/12.2  Оріль-Лідер — три майданчики
+        # у звіті з 1С вони приходять одним рядком і не розрізняються,
+        # тому взято МАКСИМУМ ціни по кожній позиції (рішення від 24.09.2026)
+        'пшениця': {'приймання':  5.30, 'очистка':  4.78, 'сушка': 25.07, 'зберігання':  0.62},
+        'ріпак':  {'приймання':  6.14, 'очистка':  5.52, 'сушка': 29.85, 'зберігання':  0.68},
+    },
+    'яготинськ': {  # ТЕ-14  Яготинський елеватор
+        'пшениця': {'приймання':  5.27, 'очистка':  5.69, 'сушка': 21.84, 'зберігання':  0.64},
+        'ріпак':  {'приймання':  5.58, 'очистка':  6.46, 'сушка': 23.51, 'зберігання':  0.60},
+    },
+    'перспектив': {  # ТЕ-15  Городенківський ел-тор ф-я Перспектив
+        'пшениця': {'приймання':  7.08, 'очистка':  7.04, 'сушка': 22.00, 'зберігання':  0.77},
+        'ріпак':  {'приймання':  7.08, 'очистка':  7.04, 'сушка': 22.00, 'зберігання':  0.77},
+    },
 }
+
+# Філії/підрозділи тієї самої юридичної особи — ті самі ціни
+for _alias, _src in (('птахофабрика', 'вквк'), ('агрокряж', 'вендичанськ'),
+                     ('урожайна', 'андріяшів'), ('агро-с', 'яготинськ')):
+    EARLY_GRAIN_PRICES[_alias] = EARLY_GRAIN_PRICES[_src]
+
+# Культури без власного прайсу — рахуються за цінами культури-аналога.
+# Гірчиця (рання олійна) — за ріпаком; у прайсах МХП її немає взагалі.
+CROP_ANALOG = {'гірчиця': 'ріпак'}
+
+# Сторонні елеватори з домовленим тарифом — рахуються за прайсом іншої
+# організації. «Урожай НВФ ТОВ» — за Ямпільським елеватором, бо це філія
+# ТОВ "Зернопродукт МХП" (рішення від 24.09.2026).
+ORG_ANALOG = {'урожай нвф': 'ямпільськ'}
+
+# ============================================================
+# ЗАПАСНІ ЗНАЧЕННЯ для позицій, яких немає у прайсах
+# Щоб нова культура чи новий елеватор не давали мовчазний 0, вони рахуються
+# за цими значеннями — завжди з попередженням у вкладці «Попередження».
+# ============================================================
+DEFAULT_CROP_KEY = 'ріпак'      # нерозпізнана культура → ціни ріпаку
+DEFAULT_ORG_KEY  = 'ямпільськ'  # організація поза прайсами → прайс Ямпільського
 
 
 def get_crop_key(nom):
@@ -177,46 +258,83 @@ def get_crop_key(nom):
         return 'пшениця'
     if 'ріпак' in low:
         return 'ріпак'
+    if 'гірчиц' in low:
+        return 'гірчиця'
     return None
 
 
+def _resolve_org_key(org, nom, service, warn_collector):
+    """Ключ організації у прайсах. Для сторонніх елеваторів із домовленим
+    тарифом (ORG_ANALOG) повертає ключ організації-аналога і сигналізує про це."""
+    ok = get_org_key(org)
+    src = ORG_ANALOG.get(ok)
+    if src:
+        if warn_collector is not None:
+            warn_collector.append({
+                'тип': 'Ціна за аналогією',
+                'організація': str(org).strip(),
+                'культура': str(nom).strip(),
+                'послуга': service,
+                'опис': f'Організації "{str(org).strip()}" немає у прайс-листах МХП. '
+                        f'За домовленістю застосовано прайс "{src}". Перевірте суму.',
+            })
+        return src
+    return ok
+
+
 def get_vat(org, nom, service, warn_collector=None):
-    """Повертає суму ПДВ. Якщо ціна не знайдена — додає попередження у warn_collector."""
+    """Повертає суму ПДВ по одній позиції.
+
+    Позиції, яких немає у прайсах, не обнуляються мовчки: нерозпізнана
+    культура рахується за DEFAULT_CROP_KEY, невідома організація — за
+    DEFAULT_ORG_KEY, і кожен такий випадок потрапляє у warn_collector.
+    """
+    def warn(tип, опис):
+        if warn_collector is not None:
+            warn_collector.append({
+                'тип': tип,
+                'організація': str(org).strip(),
+                'культура': str(nom).strip(),
+                'послуга': service,
+                'опис': опис,
+            })
+
+    org_s, nom_s = str(org).strip(), str(nom).strip()
+
+    # --- культура --------------------------------------------------------
     ck = get_crop_key(nom)
     if not ck:
-        if warn_collector is not None and nom and str(nom).strip():
-            warn_collector.append({
-                'тип': 'Невідома культура',
-                'організація': str(org).strip(),
-                'культура': str(nom).strip(),
-                'послуга': service,
-                'опис': f'Культуру "{str(nom).strip()}" не знайдено у прайс-листах. Сума ПДВ = 0.',
-            })
-        return 0.0
-    # Ранні зернові — єдиний прайс для всіх організацій (TE-03)
-    if ck in EARLY_GRAIN_PRICES:
-        return EARLY_GRAIN_PRICES[ck].get(service, 0.0)
-    ok = get_org_key(org)
+        if not nom_s:
+            return 0.0
+        ck = DEFAULT_CROP_KEY
+        warn('Невідома культура',
+             f'Культури "{nom_s}" немає у прайс-листах. '
+             f'Застосовано ціни культури "{ck}". Перевірте суму.')
+    else:
+        # культура з домовленим аналогом (гірчиця → ріпак)
+        src = CROP_ANALOG.get(ck)
+        if src:
+            warn('Ціна за аналогією',
+                 f'Для культури "{nom_s}" немає власного прайсу. '
+                 f'Застосовано ціни культури "{src}". Перевірте суму.')
+            ck = src
+
+    # --- організація -----------------------------------------------------
+    ok = _resolve_org_key(org, nom, service, warn_collector)
     if not ok:
-        if warn_collector is not None:
-            warn_collector.append({
-                'тип': 'Невідома організація',
-                'організація': str(org).strip(),
-                'культура': str(nom).strip(),
-                'послуга': service,
-                'опис': f'Організацію "{str(org).strip()}" не знайдено у прайс-листах. Сума ПДВ = 0.',
-            })
-        return 0.0
-    price = PRICES.get(ok, {}).get(ck, {}).get(service, None)
+        ok = DEFAULT_ORG_KEY
+        warn('Невідома організація',
+             f'Організації "{org_s}" немає у прайс-листах МХП. '
+             f'Застосовано прайс "{ok}". Перевірте суму.')
+
+    # --- ціна ------------------------------------------------------------
+    # ранні зернові та олійні й пізні зернові лежать в окремих прайсах
+    table = EARLY_GRAIN_PRICES if ck in ('пшениця', 'ріпак') else PRICES
+    price = table.get(ok, {}).get(ck, {}).get(service, None)
     if price is None:
-        if warn_collector is not None:
-            warn_collector.append({
-                'тип': 'Відсутня ціна',
-                'організація': str(org).strip(),
-                'культура': str(nom).strip(),
-                'послуга': service,
-                'опис': f'Немає ціни для {str(nom).strip()} / {service} у прайсі організації "{str(org).strip()}". Сума ПДВ = 0.',
-            })
+        warn('Відсутня ціна',
+             f'Немає ціни для {nom_s} / {service} у прайсі організації "{org_s}". '
+             f'Сума ПДВ = 0.')
         return 0.0
     return price
 
@@ -247,10 +365,13 @@ def is_data_row(cell_type, val):
     # Відкидаємо дати, записані як текст
     if _DATE_RE.match(low):
         return False
+    # Сторонні елеватори (Урожай НВФ тощо) НЕ фільтруються: їхні рядки
+    # потрапляють у розрахунок і, за відсутності прайсу, дають суму 0
+    # плюс попередження «Невідома організація» — щоб нічого не губилось мовчки.
     skip = {'организация', 'итого', 'дата', 'отбор:', 'сформирован:',
             'послуги зберігання', 'номенклатура', 'отправительполучатель',
             'лабораторный', 'лабораторний', 'аналізи', 'вище норми', 'нижче норми',
-            'анализ', 'артеміда', 'урожай нвф', 'околиця'}
+            'анализ'}
     for s in skip:
         if low.startswith(s):
             return False
@@ -272,6 +393,55 @@ def is_valid_nom(nom):
 
 
 # ============================================================
+# ДИНАМІЧНИЙ ПОШУК КОЛОНОК ЗА ЗАГОЛОВКАМИ
+# Вигрузка з 1С «пливе» від місяця до місяця (змінюється ширина
+# об'єднаних комірок), тому індекси колонок НЕ хардкодяться,
+# а щоразу шукаються за назвами у рядку заголовків.
+# ============================================================
+
+def _hnorm(v):
+    """Нормалізує текст заголовка для порівняння."""
+    if not isinstance(v, str):
+        return ''
+    return ' '.join(v.lower().split())
+
+
+def _header_map(sheet, row):
+    """{нормалізований_заголовок: [індекси колонок]} для вказаного рядка."""
+    m = defaultdict(list)
+    for c in range(sheet.ncols):
+        h = _hnorm(_cv(sheet, row, c, ''))
+        if h:
+            m[h].append(c)
+    return m
+
+
+def _find_header_row(sheet, required, max_scan=20):
+    """Номер рядка заголовків — перший, у якому присутні всі назви з `required`."""
+    for r in range(min(max_scan, sheet.nrows)):
+        m = _header_map(sheet, r)
+        if all(name in m for name in required):
+            return r
+    raise ValueError(
+        'Вкладка "%s": не знайдено рядок заголовків (очікували колонки: %s). '
+        'Схоже, змінився формат вигрузки.' % (sheet.name, ', '.join(required))
+    )
+
+
+def _col(hmap, name, sheet_name, after=None):
+    """Індекс колонки за назвою; `after` — брати перше входження правіше цієї колонки."""
+    idxs = hmap.get(name, [])
+    if after is not None:
+        idxs = [i for i in idxs if i > after]
+    if not idxs:
+        raise ValueError(
+            'Вкладка "%s": не знайдено колонку "%s". Схоже, змінився формат вигрузки.'
+            % (sheet_name, name)
+        )
+    return idxs[0]
+
+
+# ============================================================
 # ОСНОВНА ФУНКЦІЯ ОБРОБКИ
 # ============================================================
 def process(input_bytes: bytes) -> tuple:
@@ -289,81 +459,101 @@ def process(input_bytes: bytes) -> tuple:
     warnings         = []
 
     # ----------------------------------------------------------
-    # 1. ЗБЕРІГАННЯ  (sheet 0)
-    # cols: org=0, inn_org=6, kontrag=9, kultura=13, inn_kontrag=16,
-    #       k_zberigannya=21, cina=24, suma=25
+    # 1. ЗБЕРІГАННЯ
+    # Колонки визначаються за заголовками (див. _find_header_row).
+    # Результат дописується у дві нові колонки в кінці вкладки.
     # ----------------------------------------------------------
     rs = rb.sheet_by_name('зберігання')
-    ws = wb.get_sheet(0)
+    ws = wb.get_sheet(rb.sheet_names().index('зберігання'))
 
-    if rs.ncols <= 24 or not rs.cell_value(6, 24):
-        ws.write(6, 24, 'ціна ПДВ')
-    if rs.ncols <= 25 or not rs.cell_value(6, 25):
-        ws.write(6, 25, 'Сума ПДВ')
+    h_row     = _find_header_row(rs, ('организация', 'контрагент', 'культура',
+                                      'кількість зберігання т/д'))
+    hm        = _header_map(rs, h_row)
+    c_org     = _col(hm, 'организация', 'зберігання')
+    c_kontrag = _col(hm, 'контрагент',  'зберігання')
+    c_kultura = _col(hm, 'культура',    'зберігання')
+    c_inn_o   = _col(hm, 'инн', 'зберігання', after=c_org)
+    c_inn_k   = _col(hm, 'инн', 'зберігання', after=c_kontrag)
+    c_qty     = _col(hm, 'кількість зберігання т/д', 'зберігання')
+    c_cina, c_suma = rs.ncols, rs.ncols + 1
 
-    for i in range(7, rs.nrows):
-        ct  = rs.cell_type(i, 0)
-        org = rs.cell_value(i, 0)
+    ws.write(h_row, c_cina, 'ціна ПДВ')
+    ws.write(h_row, c_suma, 'Сума ПДВ')
+
+    for i in range(h_row + 1, rs.nrows):
+        ct  = rs.cell_type(i, c_org)
+        org = rs.cell_value(i, c_org)
         if not is_data_row(ct, org):
             continue
-        inn_o   = _inn(_cv(rs, i, 6,  ''))
-        kontrag = _cv(rs, i, 9,  '')
-        nom     = _cv(rs, i, 13, '')
-        inn_k   = _inn(_cv(rs, i, 16, ''))
-        delta   = _cv(rs, i, 21)
+        inn_o   = _inn(_cv(rs, i, c_inn_o,   ''))
+        kontrag = _cv(rs, i, c_kontrag, '')
+        nom     = _cv(rs, i, c_kultura, '')
+        inn_k   = _inn(_cv(rs, i, c_inn_k,   ''))
+        delta   = _cv(rs, i, c_qty)
         if not isinstance(delta, (int, float)) or delta == 0 or not is_valid_nom(nom):
-            ws.write(i, 24, '')
-            ws.write(i, 25, '')
+            ws.write(i, c_cina, '')
+            ws.write(i, c_suma, '')
             continue
         cina = get_vat(org, nom, 'зберігання', warnings)
         suma = round(delta * cina, 6)
-        ws.write(i, 24, cina)
-        ws.write(i, 25, suma)
+        ws.write(i, c_cina, cina)
+        ws.write(i, c_suma, suma)
         if cina > 0:
             key = (str(org).strip(), str(kontrag).strip())
             summary[key]['зберігання'] += suma
             pair_is_internal.setdefault(key, bool(inn_o and inn_k and inn_o == inn_k))
 
     # ----------------------------------------------------------
-    # 2. СУШКА  (sheet 1)
-    # cols: org=0, inn_org=4, kontrag=7, nom=11, inn_kontrag=14
-    #       k_och=17 (Количество_очистка_т%), k_sus=25 (Количество_сушка_т%)
-    #       cina_och=29, suma_och=30, cina_sus=31, suma_sus=32
+    # 2. СУШКА
+    # Заголовки у двох рядках: h_row (Организация/Контрагент/…)
+    # та h_row+1 (Количество_очистка_т% / Количество_сушка_т%).
     # ----------------------------------------------------------
     rs2 = rb.sheet_by_name('сушка')
-    ws2 = wb.get_sheet(1)
+    ws2 = wb.get_sheet(rb.sheet_names().index('сушка'))
 
-    for i in range(1, rs2.nrows):
-        ct  = rs2.cell_type(i, 0)
-        org = rs2.cell_value(i, 0)
+    h_row2     = _find_header_row(rs2, ('организация', 'контрагент', 'реальная номенклатура'))
+    hm2        = _header_map(rs2, h_row2)
+    hm2b       = _header_map(rs2, h_row2 + 1)
+    c2_org     = _col(hm2, 'организация', 'сушка')
+    c2_kontrag = _col(hm2, 'контрагент',  'сушка')
+    c2_nom     = _col(hm2, 'реальная номенклатура', 'сушка')
+    c2_inn_o   = _col(hm2, 'инн', 'сушка', after=c2_org)
+    c2_inn_k   = _col(hm2, 'инн', 'сушка', after=c2_kontrag)
+    c2_och     = _col(hm2b, 'количество_очистка_т%', 'сушка')
+    c2_sus     = _col(hm2b, 'количество_сушка_т%',   'сушка')
+    c2_cina_och, c2_suma_och = rs2.ncols,     rs2.ncols + 1
+    c2_cina_sus, c2_suma_sus = rs2.ncols + 2, rs2.ncols + 3
+
+    ws2.write(h_row2, c2_cina_och, 'ціна ПДВ очистка')
+    ws2.write(h_row2, c2_suma_och, 'Сума ПДВ очистка')
+    ws2.write(h_row2, c2_cina_sus, 'ціна ПДВ сушка')
+    ws2.write(h_row2, c2_suma_sus, 'Сума ПДВ сушка')
+
+    for i in range(h_row2 + 2, rs2.nrows):
+        ct  = rs2.cell_type(i, c2_org)
+        org = rs2.cell_value(i, c2_org)
         if not is_data_row(ct, org):
-            ws2.write(i, 29, '')
-            ws2.write(i, 30, '')
-            ws2.write(i, 31, '')
-            ws2.write(i, 32, '')
             continue
-        inn_o   = _inn(_cv(rs2, i, 4,  ''))
-        kontrag = _cv(rs2, i, 7,  '')
-        nom     = _cv(rs2, i, 11, '')
-        inn_k   = _inn(_cv(rs2, i, 14, ''))
-        d_och_v = _cv(rs2, i, 17)
-        d_sus_v = _cv(rs2, i, 25)
+        inn_o   = _inn(_cv(rs2, i, c2_inn_o,   ''))
+        kontrag = _cv(rs2, i, c2_kontrag, '')
+        nom     = _cv(rs2, i, c2_nom,     '')
+        inn_k   = _inn(_cv(rs2, i, c2_inn_k,   ''))
+        d_och_v = _cv(rs2, i, c2_och)
+        d_sus_v = _cv(rs2, i, c2_sus)
         d_och = float(d_och_v) / 1000.0 if isinstance(d_och_v, (int, float)) and d_och_v else 0.0
         d_sus = float(d_sus_v) / 1000.0 if isinstance(d_sus_v, (int, float)) and d_sus_v else 0.0
         if not (d_och or d_sus) or not is_valid_nom(nom):
-            ws2.write(i, 29, '')
-            ws2.write(i, 30, '')
-            ws2.write(i, 31, '')
-            ws2.write(i, 32, '')
             continue
-        c_och = get_vat(org, nom, 'очистка', warnings)
-        c_sus = get_vat(org, nom, 'сушка',   warnings)
-        s_och = round(d_och * c_och, 6)
-        s_sus = round(d_sus * c_sus, 6)
-        ws2.write(i, 29, c_och if d_och else '')
-        ws2.write(i, 30, s_och if d_och else '')
-        ws2.write(i, 31, c_sus if d_sus else '')
-        ws2.write(i, 32, s_sus if d_sus else '')
+        c_och_v = get_vat(org, nom, 'очистка', warnings)
+        c_sus_v = get_vat(org, nom, 'сушка',   warnings)
+        s_och = round(d_och * c_och_v, 6)
+        s_sus = round(d_sus * c_sus_v, 6)
+        if d_och:
+            ws2.write(i, c2_cina_och, c_och_v)
+            ws2.write(i, c2_suma_och, s_och)
+        if d_sus:
+            ws2.write(i, c2_cina_sus, c_sus_v)
+            ws2.write(i, c2_suma_sus, s_sus)
         total_sushka = s_och + s_sus
         if total_sushka > 0:
             key = (str(org).strip(), str(kontrag).strip())
@@ -371,38 +561,43 @@ def process(input_bytes: bytes) -> tuple:
             pair_is_internal.setdefault(key, bool(inn_o and inn_k and inn_o == inn_k))
 
     # ----------------------------------------------------------
-    # 3. ПРИЙМАННЯ  (sheet 2)
-    # cols: org=0, inn_org=5, kontrag=7, kultura=14, inn_kontrag=18,
-    #       fizves=26, cina=32, suma=33
+    # 3. ПРИЙМАННЯ
     # ----------------------------------------------------------
     rs3 = rb.sheet_by_name('приймання')
-    ws3 = wb.get_sheet(2)
+    ws3 = wb.get_sheet(rb.sheet_names().index('приймання'))
 
-    if rs3.ncols <= 32 or not rs3.cell_value(2, 32):
-        ws3.write(2, 32, 'цінаПДВ')
-    if rs3.ncols <= 33 or not rs3.cell_value(2, 33):
-        ws3.write(2, 33, 'Сума ПДВ')
+    h_row3     = _find_header_row(rs3, ('организация', 'отправительполучатель',
+                                        'культура', 'физвес'))
+    hm3        = _header_map(rs3, h_row3)
+    c3_org     = _col(hm3, 'организация', 'приймання')
+    c3_kontrag = _col(hm3, 'отправительполучатель', 'приймання')
+    c3_kultura = _col(hm3, 'культура', 'приймання')
+    c3_inn_o   = _col(hm3, 'инн', 'приймання', after=c3_org)
+    c3_inn_k   = _col(hm3, 'инн', 'приймання', after=c3_kontrag)
+    c3_fiz     = _col(hm3, 'физвес', 'приймання')
+    c3_cina, c3_suma = rs3.ncols, rs3.ncols + 1
 
-    for i in range(3, rs3.nrows):
-        ct  = rs3.cell_type(i, 0)
-        org = rs3.cell_value(i, 0)
+    ws3.write(h_row3, c3_cina, 'цінаПДВ')
+    ws3.write(h_row3, c3_suma, 'Сума ПДВ')
+
+    for i in range(h_row3 + 1, rs3.nrows):
+        ct  = rs3.cell_type(i, c3_org)
+        org = rs3.cell_value(i, c3_org)
         if not is_data_row(ct, org):
-            ws3.write(i, 32, '')
-            ws3.write(i, 33, '')
             continue
-        inn_o   = _inn(_cv(rs3, i, 5,  ''))
-        kontrag = _cv(rs3, i, 7,  '')
-        nom     = _cv(rs3, i, 14, '')
-        inn_k   = _inn(_cv(rs3, i, 18, ''))
-        fizves  = _cv(rs3, i, 26)
+        inn_o   = _inn(_cv(rs3, i, c3_inn_o,   ''))
+        kontrag = _cv(rs3, i, c3_kontrag, '')
+        nom     = _cv(rs3, i, c3_kultura, '')
+        inn_k   = _inn(_cv(rs3, i, c3_inn_k,   ''))
+        fizves  = _cv(rs3, i, c3_fiz)
         if not isinstance(fizves, (int, float)) or fizves == 0 or not is_valid_nom(nom):
-            ws3.write(i, 32, '')
-            ws3.write(i, 33, '')
+            ws3.write(i, c3_cina, '')
+            ws3.write(i, c3_suma, '')
             continue
         cina = get_vat(org, nom, 'приймання', warnings)
         suma = round(float(fizves) * cina, 6)
-        ws3.write(i, 32, cina)
-        ws3.write(i, 33, suma)
+        ws3.write(i, c3_cina, cina)
+        ws3.write(i, c3_suma, suma)
         if cina > 0:
             key = (str(org).strip(), str(kontrag).strip())
             summary[key]['приймання'] += suma
@@ -498,7 +693,8 @@ def process(input_bytes: bytes) -> tuple:
         ws5.col(c).width = w * 256
 
     if unique_warnings:
-        ws5.write(0, 0, f'⚠ Знайдено {len(unique_warnings)} позицій без ціни ПДВ — суми для них = 0', warn_orange)
+        ws5.write(0, 0, f'⚠ Знайдено {len(unique_warnings)} позицій, що потребують уваги '
+                        f'(немає у прайсі → взято запасну ціну, або сума = 0)', warn_orange)
         ws5.write(2, 0, 'Тип проблеми',  warn_hdr)
         ws5.write(2, 1, 'Організація',   warn_hdr)
         ws5.write(2, 2, 'Культура',      warn_hdr)
